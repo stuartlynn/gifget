@@ -1,0 +1,167 @@
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>Carto.js Guide</title>
+
+    <!-- Include Leaflet 1.2.0 Library -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.2.0/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.2.0/dist/leaflet.js"></script>
+    <script src="giphy.min.js"></script>
+
+    <!-- Fonts -->
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700' rel='stylesheet' type='text/css'>
+
+    <!-- Include cartodb.js Library -->
+    <script src="carto.js"></script>
+    <style>
+      * { margin:0; padding:0; }
+      html { box-sizing:border-box; height:100%; }
+      body { background:#f2f6f9; height:100%; font-family:"Open sans", Helvetica, Arial, sans-serif; }
+      #container { display:flex; width:100%; height:100%; }
+      #map { flex:1; margin:10px; }
+      #widgets { width:300px; margin:10px 10px 10px 0; }
+      .widget { background:white; padding:10px; margin-bottom:10px; }
+      .widget h1 { font-size:1.2em; }
+      .widget-formula .result { font-size:2em; }
+      #gifget{
+        height:100%;
+        overflow-y: scroll;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="container">
+      <div id="map"></div>
+      <div id="widgets">
+        <div id="gifget" class="widget">
+          <h1>Gifget</h1>
+          <h2 id='city'></h2>
+
+          <div id='gifs'>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+      var map = L.map('map').setView([58.73, 18.55], 4);
+
+      var giphy = new Giphy('3neUPJnRp3sinaKJjJMmZUw55YJ4cg4n');
+      var mouseX = 0;
+      var mouseY = 0;
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+        attribution: '&copy;<a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy;<a href="https://carto.com/attribution">CARTO</a>'
+      }).addTo(map);
+
+      // Adding Voyager Labels
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_only_labels/{z}/{x}/{y}.png', {
+        maxZoom: 18,
+        attribution: '&copy;<a href="http://www.openstreetmap.org/copyright">OpenStreetMap</a>, &copy;<a href="https://carto.com/attribution">CARTO</a>',
+        zIndex: 100
+      }).addTo(map);
+
+      var client = new carto.Client({
+        apiKey: 'cbbc4efb5201efb60996d645f264ef4e7b14495b',
+        username: 'stuartlynn'
+      });
+
+      var populatedPlacesSQL = new carto.source.SQL("SELECT * FROM ne_10m_populated_places_simple_7 ");
+      var populatedPlacesStyle = new carto.style.CartoCSS(`
+       #layer {
+         marker-width: 7;
+         marker-fill: #FF583E;
+         marker-fill-opacity: 0.9;
+         marker-line-color: #FFFFFF;
+         marker-line-width: 0.5;
+         marker-line-opacity: 1;
+         marker-type: ellipse;
+         marker-allow-overlap: false;
+       }`);
+      var populatedPlaces = new carto.layer.Layer(populatedPlacesSQL, populatedPlacesStyle, {
+        featureOverColumns: ['name']
+      });
+
+
+      client.addLayers([  populatedPlaces ]);
+      client.getLeafletLayer().addTo(map);
+
+      var gifContainer = document.getElementById('gifs');
+      var placeName    = document.getElementById('city')
+
+
+      var getGifs = function(phrase){
+        placeName.innerHTML=phrase
+
+        giphy.search({
+        	q: phrase,
+        	offset: 0,
+        	fmt: 'json',
+        	'limit': 10
+        },
+        function(result){
+
+          var images = result.data.reduce(function(s,obj){
+            var img = new Image()
+            var randAng = Math.random()*2*Math.PI
+            var destLocX = mouseX + 500*Math.cos(randAng)
+            var destLocY = mouseY + 500*Math.sin(randAng)
+
+            var cssString = `
+              position:absolute;
+              top: ${mouseY}px;
+              left: ${mouseX}px;
+              webkit-transition-duration:1s;
+              transition-duration:1s;
+              -webkit-transition-timing-function: ease-in;
+              transition-timing-function: ease-in;
+              -webkit-transition-property: top left;
+              transition-property: top left;\
+              opacity:1;
+              z-index:10000;
+            `
+            console.log('cssString ', cssString)
+            img.src = obj.images.fixed_width_downsampled.url;
+            document.body.appendChild(img)
+
+            img.setAttribute('style',cssString)
+            setTimeout(function(){
+              img.style.top = destLocY;
+              img.style.left= destLocX;
+              img.style.opacity= 0;
+            },10)
+
+            setTimeout(function(){
+              document.body.removeChild(img)
+            },1010)
+
+            s += "<img src='"+obj.images.fixed_width_downsampled.url +"'></img>"
+            return s;
+          },'')
+          gifContainer.innerHTML = images
+
+        },
+        function(error){
+          console.log('error fetching gifs ',error)
+        });
+
+        // var params = {api_key:'3neUPJnRp3sinaKJjJMmZUw55YJ4cg4n' , q:phrase , limit:20}
+        // var paramString = Object.keys(params).reduce(function(key,s){ return s+"&"+params[key]}, '')
+        // var query = 'https://api.giphy.com/v1/gifs/search?'+paramString
+        // return fetch(query)
+      }
+
+
+      document.addEventListener('mousemove',function(e){
+        mouseX = e.pageX
+        mouseY = e.pageY
+      },false);
+
+      populatedPlaces.on('featureOver', function (featureEvent) {
+        getGifs(featureEvent.data.name)
+      });
+
+
+    </script>
+  </body>
+</html>
